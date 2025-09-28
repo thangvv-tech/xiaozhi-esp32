@@ -25,10 +25,17 @@ public:
         static constexpr float kAngleChangeThresholdDeg = 1.0f;   // 姿态角变化阈值
         static constexpr uint32_t kInitWarmupSamples = 30;         // 初始化样本数
         static constexpr uint32_t kCalibrationSamples = 100;       // 占位校准样本数
-        static constexpr uint32_t kTaskIntervalMs = 100;           // 任务循环间隔
-        static constexpr uint32_t kMinuteMs = 10000;               // 一分钟毫秒数
+        // 目标采样频率 ~80Hz：使用 12ms/13ms 交替获得平均 12.5ms
+        static constexpr uint32_t kTaskIntervalMsA = 12;           // 间隔A
+        static constexpr uint32_t kTaskIntervalMsB = 13;           // 间隔B
+        static constexpr bool kUseAlternateIntervals = true;       // 交替开关
+        static constexpr uint32_t kMinuteMs = 60000;               // 一分钟毫秒数
         static constexpr float kMinuteStaticRatio = 0.90f;         // 当分钟静止比例阈值
         static constexpr uint32_t kConsecutiveStaticMinutesForSleep = 2; // 连续静止分钟数阈值
+        static constexpr uint32_t kSamplesPerMinute() {
+            // 平均周期约 (12+13)/2 = 12.5 ms -> 60000/12.5 = 4800 样本/分钟
+            return (kMinuteMs * 2) / (kTaskIntervalMsA + kTaskIntervalMsB);
+        }
     };
 
 private:

@@ -5,6 +5,14 @@
 
 #include <cstring>
 #include <esp_log.h>
+#include <esp_timer.h>
+
+#if __has_include("wifi_station.h")
+#include <wifi_station.h>
+#define HAS_WIFI_STATION 1
+#else
+#define HAS_WIFI_STATION 0
+#endif
 
 #define TAG "SleepMusic"
 
@@ -111,7 +119,11 @@ bool SleepMusicProtocol::StartSleepMusic() {
         ESP_LOGI(TAG, "Sleep music already started");
         return true;
     }
-    
+
+    // 无网快速失败：若网络未连接，直接返回失败并不阻塞
+    // 仅在典型WiFi板：查询 WifiStation 是否连网；若为其它网络实现，可在 NetworkInterface 内扩展
+    extern bool wifi_is_connected_weak(); // 弱符号查询（若不存在则返回true）
+
     auto &app = Application::GetInstance();
     // 立刻停止当前语音对话流程（无论在说话还是在监听）
     app.Schedule([&app]() {
@@ -127,14 +139,33 @@ bool SleepMusicProtocol::StartSleepMusic() {
         app.SetDeviceState(kDeviceStateIdle);
     });
 
-    // 启动协议
-    if (OpenAudioChannel()) {
-        ESP_LOGI(TAG, "Sleep music started successfully");
-        return true;
-    } else {
-        ESP_LOGE(TAG, "Failed to start sleep music");
+    // 无网快速失败
+    if (!IsNetworkReady()) {
+        ESP_LOGW(TAG, "Network not ready, skip starting sleep music now");
         return false;
     }
+
+    // 异步连接，避免阻塞：创建后台任务尝试连接，并设置退避
+    if (is_connecting_) {
+        ESP_LOGW(TAG, "Sleep music is connecting, skip duplicate request");
+        return false;
+    }
+    is_connecting_ = true;
+    last_connect_attempt_ms_ = (uint32_t)(esp_timer_get_time() / 1000);
+
+    xTaskCreate([](void* arg){
+        SleepMusicProtocol* self = static_cast<SleepMusicProtocol*>(arg);
+        bool ok = self->OpenAudioChannel();
+        if (!ok) {
+            ESP_LOGW(TAG, "Sleep music connect failed, will backoff %u ms", self->RETRY_BACKOFF_MS);
+            vTaskDelay(pdMS_TO_TICKS(self->RETRY_BACKOFF_MS));
+        }
+        self->is_connecting_ = false;
+        vTaskDelete(NULL);
+    }, "sleep_music_connect", 4096, this, 5, nullptr);
+
+    // 立即返回，不阻塞业务
+    return false;
 }
 
 bool SleepMusicProtocol::StopSleepMusic() {
@@ -144,4 +175,13 @@ bool SleepMusicProtocol::StopSleepMusic() {
     
     ESP_LOGI(TAG, "Sleep music stopped successfully");
     return true;
+}
+
+bool SleepMusicProtocol::IsNetworkReady() const {
+#if HAS_WIFI_STATION
+    return WifiStation::GetInstance().IsConnected();
+#else
+    // 若未知网络实现，则不阻塞主流程，交给连接过程自行失败/退避
+    return true;
+#endif
 }

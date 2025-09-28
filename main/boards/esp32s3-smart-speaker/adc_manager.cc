@@ -124,7 +124,7 @@ void AdcManager::ReadPressureSensorData() {
   }
 
   // 多次采样 + 去极值平均，降低尖峰/串扰影响
-  static constexpr int kReads = 12;
+  static constexpr int kReads = 20;
   int values[kReads];
   int success_count = 0;
   for (int i = 0; i < kReads; ++i) {
@@ -139,20 +139,32 @@ void AdcManager::ReadPressureSensorData() {
     return;
   }
   // 单遍扫描求和+极值，避免排序带来的小数组静态阈值告警
-  int min1 = 0x7FFFFFFF, min2 = 0x7FFFFFFF;
-  int max1 = -0x7FFFFFFF, max2 = -0x7FFFFFFF;
+  int min1 = 0x7FFFFFFF, min2 = 0x7FFFFFFF, min3 = 0x7FFFFFFF, min4 = 0x7FFFFFFF;
+  int max1 = -0x7FFFFFFF, max2 = -0x7FFFFFFF, max3 = -0x7FFFFFFF, max4 = -0x7FFFFFFF;
   long sum = 0;
   for (int i = 0; i < success_count; ++i) {
     int v = values[i];
     sum += v;
-    if (v < min1) { min2 = min1; min1 = v; }
-    else if (v < min2) { min2 = v; }
-    if (v > max1) { max2 = max1; max1 = v; }
-    else if (v > max2) { max2 = v; }
+    // 更新四小值
+    if (v < min1) { min4 = min3; min3 = min2; min2 = min1; min1 = v; }
+    else if (v < min2) { min4 = min3; min3 = min2; min2 = v; }
+    else if (v < min3) { min4 = min3; min3 = v; }
+    else if (v < min4) { min4 = v; }
+    // 更新四大值
+    if (v > max1) { max4 = max3; max3 = max2; max2 = max1; max1 = v; }
+    else if (v > max2) { max4 = max3; max3 = max2; max2 = v; }
+    else if (v > max3) { max4 = max3; max3 = v; }
+    else if (v > max4) { max4 = v; }
   }
   int remove_cnt = 0;
   long remove_sum = 0;
-  if (success_count >= 8) { // 丢2大2小
+  if (success_count >= 16) { // 丢4大4小（读20次，足够冗余时更强去极值）
+    remove_cnt = 8;
+    remove_sum = (long)min1 + min2 + min3 + min4 + max1 + max2 + max3 + max4;
+  } else if (success_count >= 10) { // 丢3大3小
+    remove_cnt = 6;
+    remove_sum = (long)min1 + min2 + min3 + max1 + max2 + max3;
+  } else if (success_count >= 8) { // 丢2大2小
     remove_cnt = 4;
     remove_sum = (long)min1 + min2 + max1 + max2;
   } else if (success_count >= 5) { // 丢1大1小

@@ -130,6 +130,8 @@ void ImuManager::ImuDataTask(void *pvParameters) {
     static bool calibration_done = false;
     static uint32_t calibration_samples = 0;
 
+    bool use_alt = ImuDetectConfig::kUseAlternateIntervals;
+    bool toggle = false;
     while (true) {
         if (manager->mpu6050_sensor_ && manager->initialized_) {
             bool data_valid = true;
@@ -181,7 +183,7 @@ void ImuManager::ImuDataTask(void *pvParameters) {
                 }
                 
                 // 到达一分钟边界 → 评估静止比例
-                if (now_ms - minute_start_time_ms >= ImuDetectConfig::kMinuteMs || minute_total_samples >= (ImuDetectConfig::kMinuteMs / ImuDetectConfig::kTaskIntervalMs)) {
+                if (now_ms - minute_start_time_ms >= ImuDetectConfig::kMinuteMs || minute_total_samples >= ImuDetectConfig::kSamplesPerMinute()) {
                     float minute_static_ratio = minute_total_samples > 0 ? (float)minute_static_samples / (float)minute_total_samples : 0.0f;
                     bool minute_is_static = (minute_static_ratio >= ImuDetectConfig::kMinuteStaticRatio);
                     if (minute_is_static) {
@@ -253,6 +255,11 @@ void ImuManager::ImuDataTask(void *pvParameters) {
                 }
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(ImuDetectConfig::kTaskIntervalMs));
+        if (use_alt) {
+            vTaskDelay(pdMS_TO_TICKS(toggle ? ImuDetectConfig::kTaskIntervalMsB : ImuDetectConfig::kTaskIntervalMsA));
+            toggle = !toggle;
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(ImuDetectConfig::kTaskIntervalMsB));
+        }
     }
 }

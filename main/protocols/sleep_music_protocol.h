@@ -27,6 +27,10 @@ private:
     EventGroupHandle_t event_group_handle_;
     std::unique_ptr<WebSocket> websocket_;
     bool is_connected_ = false;
+    bool is_connecting_ = false; // 避免重复连接与阻塞
+    uint32_t last_connect_attempt_ms_ = 0; // 重试退避
+    static constexpr uint32_t CONNECT_TIMEOUT_MS = 8000; // 单次连接超时
+    static constexpr uint32_t RETRY_BACKOFF_MS = 10000;  // 无网或失败后的退避
     
     // 睡眠音乐服务器配置
     static constexpr int SAMPLE_RATE = 24000;  // 24kHz
@@ -34,6 +38,7 @@ private:
     static constexpr int FRAME_DURATION_MS = 60; // 60ms帧时长
     
     void OnAudioDataReceived(const char* data, size_t len);
+    bool IsNetworkReady() const;
 };
 
 #endif

@@ -85,16 +85,19 @@ void ButtonManager::SetupButtonCallbacks() {
     ESP_LOGI(TAG,
              "Volume up long pressed: switching to voice interaction mode");
 
-    // 播放进入语音交互模式的提示音
-    auto &app = Application::GetInstance();
-    app.PlaySound("success"); // 播放成功提示音
-
     // 暂停音乐播放
     auto music = Board::GetInstance().GetMusic();
     if (music && music->IsPlaying()) {
       music->PauseSong();
       ESP_LOGI(TAG, "Music paused for voice interaction");
     }
+
+    auto &sleep_protocol = SleepMusicProtocol::GetInstance();
+    sleep_protocol.CloseAudioChannel();
+
+    // 播放进入语音交互模式的提示音
+    auto &app = Application::GetInstance();
+    app.PlaySound("success"); // 播放成功提示音
 
     // 切换到语音交互模式
     app.GetAudioService().EnableWakeWordDetection(true);
