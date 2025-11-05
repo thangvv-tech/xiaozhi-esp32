@@ -578,7 +578,7 @@ bool SscmaCamera::Capture() {
     }
 
     // 显示预览图片
-    auto display = dynamic_cast<LvglDisplay*>(Board::GetInstance().GetDisplay());
+    auto display = static_cast<LvglDisplay*>(Board::GetInstance().GetDisplay());
     if (display != nullptr) {
         uint16_t w = preview_image_.header.w;
         uint16_t h = preview_image_.header.h;

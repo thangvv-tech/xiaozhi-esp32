@@ -24,9 +24,11 @@ set(SOURCES "audio/audio_codec.cc"
             "display/lvgl_display/gif/lvgl_gif.cc"
             "display/lvgl_display/gif/gifdec.c"
             "display/lvgl_display/jpg/image_to_jpeg.cpp"
+            "display/esplog_display.cc"
             "protocols/protocol.cc"
             "protocols/mqtt_protocol.cc"
             "protocols/websocket_protocol.cc"
+            "protocols/sleep_music_protocol.cc"
             "mcp_server.cc"
             "system_info.cc"
             "application.cc"
@@ -34,6 +36,8 @@ set(SOURCES "audio/audio_codec.cc"
             "settings.cc"
             "device_state_event.cc"
             "assets.cc"
+            "schedule_manager.cc"
+            "timer_manager.cc"
             "main.cc"
             )
 
@@ -646,14 +650,14 @@ file(GLOB LANG_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/${LANG_DIR}/*.o
 # If not en-US, collect en-US audio files as fallback for missing files
 if(NOT LANG_DIR STREQUAL "en-US")
     file(GLOB EN_US_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/locales/en-US/*.ogg)
-    
+
     # Extract filenames (without path) from current language
     set(EXISTING_NAMES "")
     foreach(SOUND_FILE ${LANG_SOUNDS})
         get_filename_component(FILENAME ${SOUND_FILE} NAME)
         list(APPEND EXISTING_NAMES ${FILENAME})
     endforeach()
-    
+
     # Only add en-US audio files that are missing in current language
     foreach(EN_SOUND ${EN_US_SOUNDS})
         get_filename_component(FILENAME ${EN_SOUND} NAME)
@@ -764,31 +768,31 @@ endif()
 function(build_default_assets_bin)
     # Set output path for generated assets.bin
     set(GENERATED_ASSETS_BIN "${CMAKE_BINARY_DIR}/generated_assets.bin")
-    
+
     # Prepare arguments for build script
     set(BUILD_ARGS
         "--sdkconfig" "${SDKCONFIG}"
         "--output" "${GENERATED_ASSETS_BIN}"
     )
-    
+
     # Add builtin text font if defined
     if(BUILTIN_TEXT_FONT)
         list(APPEND BUILD_ARGS "--builtin_text_font" "${BUILTIN_TEXT_FONT}")
     endif()
-    
+
     # Add default emoji collection if defined
     if(DEFAULT_EMOJI_COLLECTION)
         list(APPEND BUILD_ARGS "--emoji_collection" "${DEFAULT_EMOJI_COLLECTION}")
     endif()
-    
+
     # Add default assets extra files if defined
     if(DEFAULT_ASSETS_EXTRA_FILES)
         list(APPEND BUILD_ARGS "--extra_files" "${DEFAULT_ASSETS_EXTRA_FILES}")
     endif()
-    
+
     list(APPEND BUILD_ARGS "--esp_sr_model_path" "${ESP_SR_MODEL_PATH}")
     list(APPEND BUILD_ARGS "--xiaozhi_fonts_path" "${XIAOZHI_FONTS_PATH}")
-    
+
     # Create custom command to build assets
     add_custom_command(
         OUTPUT ${GENERATED_ASSETS_BIN}
@@ -799,15 +803,15 @@ function(build_default_assets_bin)
         COMMENT "Building default assets.bin based on configuration"
         VERBATIM
     )
-    
+
     # Create target for generated assets
     add_custom_target(generated_default_assets ALL
         DEPENDS ${GENERATED_ASSETS_BIN}
     )
-    
+
     # Set the generated file path in parent scope
     set(GENERATED_ASSETS_LOCAL_FILE ${GENERATED_ASSETS_BIN} PARENT_SCOPE)
-    
+
     message(STATUS "Default assets build configured: ${GENERATED_ASSETS_BIN}")
 endfunction()
 
