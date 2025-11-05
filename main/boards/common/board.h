@@ -11,6 +11,7 @@
 #include "led/led.h"
 #include "backlight.h"
 #include "camera.h"
+#include "music.h"
 #include "assets.h"
 
 
@@ -28,6 +29,7 @@ protected:
 
     // 软件生成的设备唯一标识
     std::string uuid_;
+    Music* music_;
 
 public:
     static Board& GetInstance() {

@@ -8,12 +8,14 @@
 #include <esp_app_desc.h>
 #include <algorithm>
 #include <cstring>
+#include <cctype>
 #include <esp_pthread.h>
 
 #include "application.h"
 #include "display.h"
 #include "oled_display.h"
 #include "board.h"
+#include "boards/common/esp32_music.h"
 #include "settings.h"
 #include "lvgl_theme.h"
 #include "lvgl_display.h"
@@ -76,6 +78,61 @@ void McpServer::AddCommonTools() {
                 return true;
             });
     }
+
+    auto music = board.GetMusic();
+     if (music) {
+         AddTool("self.music.play_song",
+             "Phát bài hát được chỉ định. Khi người dùng yêu cầu phát nhạc, công cụ này sẽ tự động lấy thông tin chi tiết của bài hát và bắt đầu phát trực tuyến.\n"
+             "Tham số:\n"
+             "  `song_name`: Tên bài hát cần phát (bắt buộc).\n"
+             "  `artist_name`: Tên nghệ sĩ của bài hát (tùy chọn, mặc định là chuỗi rỗng).\n"
+             "Kết quả:\n"
+             "Trả về thông tin trạng thái phát nhạc, không cần xác nhận, phát nhạc ngay lập tức.",
+             PropertyList({
+                 Property("song_name", kPropertyTypeString),
+                 Property("artist_name", kPropertyTypeString, "")
+             }),
+             [music](const PropertyList& properties) -> ReturnValue {
+                 auto song_name = properties["song_name"].value<std::string>();
+                 auto artist_name = properties["artist_name"].value<std::string>();
+                 
+                 if (!music->Download(song_name, artist_name)) {
+                     return "{\"success\": false, \"message\": \"Lấy nhạc thất bại\"}";
+                 }
+                 auto download_result = music->GetDownloadResult();
+                 ESP_LOGI(TAG, "Music details result: %s", download_result.c_str());
+                 return "{\"success\": true, \"message\": \"Bắt đầu phát nhạc\"}";
+             });
+ 
+         AddTool("self.music.set_display_mode",
+             "Thiết lập chế độ hiển thị khi phát nhạc. Có thể hiển thị phổ hoặc lời bài hát, ví dụ như người dùng nói 'mở phổ' hoặc 'hiển thị phổ', 'mở lời bài hát' hoặc 'hiển thị lời bài hát' để thiết lập chế độ hiển thị tương ứng.\n"
+             "参数:\n"
+             "  `mode`: Chế độ hiển thị, có thể là 'spectrum' (phổ) hoặc 'lyrics' (lời bài hát).\n"
+             "Kết quả:\n"
+             "  Thông tin kết quả thiết lập.",
+             PropertyList({
+                 Property("mode", kPropertyTypeString)
+             }),
+             [music](const PropertyList& properties) -> ReturnValue {
+                 auto mode_str = properties["mode"].value<std::string>();
+                 
+                 std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(), ::tolower);
+                 
+                 if (mode_str == "spectrum" || mode_str == "频谱") {
+                     auto esp32_music = static_cast<Esp32Music*>(music);
+                     esp32_music->SetDisplayMode(Esp32Music::DISPLAY_MODE_SPECTRUM);
+                     return "{\"success\": true, \"message\": \"Đã chuyển sang chế độ hiển thị phổ\"}";
+                 } else if (mode_str == "lyrics" || mode_str == "歌词") {
+                     auto esp32_music = static_cast<Esp32Music*>(music);
+                     esp32_music->SetDisplayMode(Esp32Music::DISPLAY_MODE_LYRICS);
+                     return "{\"success\": true, \"message\": \"Đã chuyển sang chế độ hiển thị lời bài hát\"}";
+                 } else {
+                     return "{\"success\": false, \"message\": \"Chế độ hiển thị không hợp lệ, vui lòng sử dụng 'spectrum' hoặc 'lyrics'\"}";
+                 }
+                 
+                 return "{\"success\": false, \"message\": \"Thiết lập chế độ hiển thị thất bại\"}";
+             });
+     }
 
 #ifdef HAVE_LVGL
     auto display = board.GetDisplay();
