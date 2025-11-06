@@ -1,7 +1,7 @@
 #ifndef GPIO_MANAGER_H
 #define GPIO_MANAGER_H
 
-#include "config.h"
+#include "boards/bread-compact-wifi-lcd/config.h"
 #include <driver/gpio.h>
 
 class GpioManager {

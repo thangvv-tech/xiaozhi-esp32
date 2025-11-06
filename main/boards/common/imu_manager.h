@@ -1,7 +1,7 @@
 #ifndef IMU_MANAGER_H
 #define IMU_MANAGER_H
 
-#include "config.h"
+#include "boards/bread-compact-wifi-lcd/config.h"
 #include <driver/i2c_master.h>
 #include <memory>
 #include "mpu6050_sensor.h"
