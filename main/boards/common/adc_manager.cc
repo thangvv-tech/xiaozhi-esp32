@@ -12,7 +12,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "protocols/sleep_music_protocol.h"
-#include "config.h"
+#include "boards/bread-compact-wifi-lcd/config.h"
 #include "imu_manager.h"
 
 #define TAG "AdcManager"
