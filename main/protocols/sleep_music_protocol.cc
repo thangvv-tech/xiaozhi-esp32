@@ -1,0 +1,187 @@
+#include "sleep_music_protocol.h"
+#include "board.h"
+#include "application.h"
+#include "protocol.h"
+
+#include <cstring>
+#include <esp_log.h>
+#include <esp_timer.h>
+
+#if __has_include("wifi_station.h")
+#include <wifi_station.h>
+#define HAS_WIFI_STATION 1
+#else
+#define HAS_WIFI_STATION 0
+#endif
+
+#define TAG "SleepMusic"
+
+SleepMusicProtocol& SleepMusicProtocol::GetInstance() {
+    static SleepMusicProtocol instance;
+    return instance;
+}
+
+SleepMusicProtocol::SleepMusicProtocol() {
+    event_group_handle_ = xEventGroupCreate();
+}
+
+SleepMusicProtocol::~SleepMusicProtocol() {
+    vEventGroupDelete(event_group_handle_);
+}
+
+bool SleepMusicProtocol::IsAudioChannelOpened() const {
+    return is_connected_ && websocket_ != nullptr && websocket_->IsConnected();
+}
+
+void SleepMusicProtocol::CloseAudioChannel() {
+    if (websocket_) {
+        ESP_LOGI(TAG, "Closing sleep music audio channel");
+        
+        // 清理状态
+        is_connected_ = false;
+        
+        // 关闭WebSocket连接
+        websocket_.reset();
+        
+        ESP_LOGI(TAG, "Sleep music audio channel closed");
+    }
+}
+
+bool SleepMusicProtocol::OpenAudioChannel() {
+    std::string url = "ws://180.76.190.230:8765";
+    
+    ESP_LOGI(TAG, "Connecting to sleep music server: %s", url.c_str());
+
+    auto network = Board::GetInstance().GetNetwork();
+    websocket_ = network->CreateWebSocket(2); // 使用不同的WebSocket实例ID
+    if (websocket_ == nullptr) {
+        ESP_LOGE(TAG, "Failed to create websocket for sleep music");
+        return false;
+    }
+
+    // 设置WebSocket数据接收回调
+    websocket_->OnData([this](const char* data, size_t len, bool binary) {
+        if (binary) {
+            // 接收到的二进制数据是OPUS编码的音频帧
+            OnAudioDataReceived(data, len);
+        } else {
+            ESP_LOGW(TAG, "Received non-binary data from sleep music server, ignoring");
+        }
+    });
+
+    websocket_->OnDisconnected([this]() {
+        ESP_LOGI(TAG, "Sleep music websocket disconnected");
+    });
+
+    // 连接到睡眠音乐服务器
+    if (!websocket_->Connect(url.c_str())) {
+        ESP_LOGE(TAG, "Failed to connect to sleep music server");
+        return false;
+    }
+
+    // 设置连接成功事件
+    xEventGroupSetBits(event_group_handle_, SLEEP_MUSIC_PROTOCOL_CONNECTED_EVENT);
+
+    ESP_LOGI(TAG, "Successfully connected to sleep music server");
+    is_connected_ = true;
+    return true;
+}
+
+void SleepMusicProtocol::OnAudioDataReceived(const char* data, size_t len) {
+    if (len == 0) {
+        ESP_LOGW(TAG, "Received empty audio data");
+        return;
+    }
+
+    ESP_LOGD(TAG, "Received audio frame: %zu bytes", len);
+
+    // 创建AudioStreamPacket
+    auto packet = std::make_unique<AudioStreamPacket>();
+    packet->sample_rate = SAMPLE_RATE;
+    packet->frame_duration = FRAME_DURATION_MS;
+    packet->timestamp = 0; // 睡眠音乐不需要时间戳同步
+    packet->payload.resize(len);
+    std::memcpy(packet->payload.data(), data, len);
+
+    // 将音频包推入解码队列
+    auto& app = Application::GetInstance();
+    auto& audio_service = app.GetAudioService();
+    
+    if (!audio_service.PushPacketToDecodeQueue(std::move(packet), false)) {
+        ESP_LOGW(TAG, "Audio decode queue is full, dropping packet");
+    }
+}
+
+bool SleepMusicProtocol::StartSleepMusic() {
+    ESP_LOGI(TAG, "Starting sleep music...");
+    
+    if (IsAudioChannelOpened()) {
+        ESP_LOGI(TAG, "Sleep music already started");
+        return true;
+    }
+
+    // 无网快速失败：若网络未连接，直接返回失败并不阻塞
+    // 仅在典型WiFi板：查询 WifiStation 是否连网；若为其它网络实现，可在 NetworkInterface 内扩展
+    extern bool wifi_is_connected_weak(); // 弱符号查询（若不存在则返回true）
+
+    auto &app = Application::GetInstance();
+    // 立刻停止当前语音对话流程（无论在说话还是在监听）
+    app.Schedule([&app]() {
+        // 1) 打断TTS/回复
+        app.AbortSpeaking(kAbortReasonNone);
+        // 2) 通知上游停止监听
+        if (auto* proto = app.GetProtocol()) {
+            proto->SendStopListening();
+            if (proto->IsAudioChannelOpened()) {
+                proto->CloseAudioChannel();
+            }
+        }
+        app.SetDeviceState(kDeviceStateIdle);
+    });
+
+    // 无网快速失败
+    if (!IsNetworkReady()) {
+        ESP_LOGW(TAG, "Network not ready, skip starting sleep music now");
+        return false;
+    }
+
+    // 异步连接，避免阻塞：创建后台任务尝试连接，并设置退避
+    if (is_connecting_) {
+        ESP_LOGW(TAG, "Sleep music is connecting, skip duplicate request");
+        return false;
+    }
+    is_connecting_ = true;
+    last_connect_attempt_ms_ = (uint32_t)(esp_timer_get_time() / 1000);
+
+    xTaskCreate([](void* arg){
+        SleepMusicProtocol* self = static_cast<SleepMusicProtocol*>(arg);
+        bool ok = self->OpenAudioChannel();
+        if (!ok) {
+            ESP_LOGW(TAG, "Sleep music connect failed, will backoff %u ms", self->RETRY_BACKOFF_MS);
+            vTaskDelay(pdMS_TO_TICKS(self->RETRY_BACKOFF_MS));
+        }
+        self->is_connecting_ = false;
+        vTaskDelete(NULL);
+    }, "sleep_music_connect", 4096, this, 5, nullptr);
+
+    // 立即返回，不阻塞业务
+    return false;
+}
+
+bool SleepMusicProtocol::StopSleepMusic() {
+    ESP_LOGI(TAG, "Stopping sleep music...");
+    
+    CloseAudioChannel();
+    
+    ESP_LOGI(TAG, "Sleep music stopped successfully");
+    return true;
+}
+
+bool SleepMusicProtocol::IsNetworkReady() const {
+#if HAS_WIFI_STATION
+    return WifiStation::GetInstance().IsConnected();
+#else
+    // 若未知网络实现，则不阻塞主流程，交给连接过程自行失败/退避
+    return true;
+#endif
+}
