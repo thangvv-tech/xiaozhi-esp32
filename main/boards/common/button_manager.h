@@ -2,7 +2,7 @@
 #define BUTTON_MANAGER_H
 
 #include "button.h"
-#include "config.h"
+#include "boards/bread-compact-wifi-lcd/config.h"
 
 class ButtonManager {
 public:
