@@ -121,60 +121,9 @@ void McpServer::AddCommonTools() {
                 return camera->Explain(question);
             });
     }
-#endif
-
-    // Restore the original tools list to the end of the tools list
-    tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());
-}
-
-void McpServer::AddUserOnlyTools() {
-    // System tools
-    AddTool("self.get_system_info",
-        "Get the system information",
-        PropertyList(),
-        [this](const PropertyList& properties) -> ReturnValue {
-            auto& board = Board::GetInstance();
-            return board.GetSystemInfoJson();
-        });
-
-    AddTool("self.reboot", "Reboot the system",
-        PropertyList(),
-        [this](const PropertyList& properties) -> ReturnValue {
-            auto& app = Application::GetInstance();
-            app.Schedule([&app]() {
-                ESP_LOGW(TAG, "User requested reboot");
-                vTaskDelay(pdMS_TO_TICKS(1000));
-
-                app.Reboot();
-            });
-            return true;
-        });
-
-    // Firmware upgrade
-    AddUserOnlyTool("self.upgrade_firmware", "Upgrade firmware from a specific URL. This will download and install the firmware, then reboot the device.",
-        PropertyList({
-            Property("url", kPropertyTypeString, "The URL of the firmware binary file to download and install")
-        }),
-        [this](const PropertyList& properties) -> ReturnValue {
-            auto url = properties["url"].value<std::string>();
-            ESP_LOGI(TAG, "User requested firmware upgrade from URL: %s", url.c_str());
-
-            auto& app = Application::GetInstance();
-            app.Schedule([url, &app]() {
-                auto ota = std::make_unique<Ota>();
-
-                bool success = app.UpgradeFirmware(*ota, url);
-                if (!success) {
-                    ESP_LOGE(TAG, "Firmware upgrade failed");
-                }
-            });
-
-            return true;
-        });
-
     // Music control (only if music player is available)
-    if (Board::GetInstance().GetMusic()) {
-        auto music = Board::GetInstance().GetMusic();
+    auto music = board.GetMusic();
+    if (music) {
 
         // 播放指定歌曲（带歌曲名与可选歌手名）
         AddTool("self.music.play_song",
@@ -244,6 +193,56 @@ void McpServer::AddUserOnlyTools() {
                 return ok;
             });
     }
+#endif
+
+    // Restore the original tools list to the end of the tools list
+    tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());
+}
+
+void McpServer::AddUserOnlyTools() {
+    // System tools
+    AddTool("self.get_system_info",
+        "Get the system information",
+        PropertyList(),
+        [this](const PropertyList& properties) -> ReturnValue {
+            auto& board = Board::GetInstance();
+            return board.GetSystemInfoJson();
+        });
+
+    AddTool("self.reboot", "Reboot the system",
+        PropertyList(),
+        [this](const PropertyList& properties) -> ReturnValue {
+            auto& app = Application::GetInstance();
+            app.Schedule([&app]() {
+                ESP_LOGW(TAG, "User requested reboot");
+                vTaskDelay(pdMS_TO_TICKS(1000));
+
+                app.Reboot();
+            });
+            return true;
+        });
+
+    // Firmware upgrade
+    AddUserOnlyTool("self.upgrade_firmware", "Upgrade firmware from a specific URL. This will download and install the firmware, then reboot the device.",
+        PropertyList({
+            Property("url", kPropertyTypeString, "The URL of the firmware binary file to download and install")
+        }),
+        [this](const PropertyList& properties) -> ReturnValue {
+            auto url = properties["url"].value<std::string>();
+            ESP_LOGI(TAG, "User requested firmware upgrade from URL: %s", url.c_str());
+
+            auto& app = Application::GetInstance();
+            app.Schedule([url, &app]() {
+                auto ota = std::make_unique<Ota>();
+
+                bool success = app.UpgradeFirmware(*ota, url);
+                if (!success) {
+                    ESP_LOGE(TAG, "Firmware upgrade failed");
+                }
+            });
+
+            return true;
+        });
 
     // Display control
 #ifdef HAVE_LVGL
