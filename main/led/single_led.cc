@@ -1,6 +1,6 @@
 #include "single_led.h"
 #include "application.h"
-#include "boards/esp32s3-smart-speaker/adc_manager.h"
+#include "boards/common/adc_manager.h"
 #include <esp_log.h> 
 
 #define TAG "SingleLed"
