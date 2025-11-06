@@ -43,7 +43,7 @@
 #define AUDIO_TESTING_MAX_DURATION_MS 10000
 #define MAX_TIMESTAMPS_IN_QUEUE 3
 
-#define AUDIO_POWER_TIMEOUT_MS 15000
+#define AUDIO_POWER_TIMEOUT_MS 4000
 #define AUDIO_POWER_CHECK_INTERVAL_MS 1000
 
 
@@ -109,7 +109,7 @@ public:
     bool ReadAudioData(std::vector<int16_t>& data, int sample_rate, int samples);
     void ResetDecoder();
     void SetModelsList(srmodel_list_t* models_list);
-
+    void UpdateOutputTimestamp();
 private:
     AudioCodec* codec_ = nullptr;
     AudioServiceCallbacks callbacks_;
