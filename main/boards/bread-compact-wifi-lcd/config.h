@@ -2,6 +2,7 @@
 #define _BOARD_CONFIG_H_
 
 #include <driver/gpio.h>
+#include <esp_adc/adc_oneshot.h>
 
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
@@ -34,6 +35,9 @@
 #define VOLUME_UP_BUTTON_GPIO   GPIO_NUM_NC
 #define VOLUME_DOWN_BUTTON_GPIO GPIO_NUM_NC
 #define TEST_BUTTON_GPIO        GPIO_NUM_NC
+
+// 压感传感器 (ADC接口) - GPIO4 maps to ADC1_CHANNEL_3 on ESP32-S3
+#define PRESSURE_SENSOR_ADC_LEFT_CHANNEL  ADC_CHANNEL_3
 
 
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_42
