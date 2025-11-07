@@ -55,9 +55,9 @@ private:
   // === Thêm các phần từ Esp32s3SmartSpeaker ===
   void InitializeManagers() {
     ESP_LOGI(TAG, "Initializing managers...");
-    AdcManager::GetInstance().Initialize();
-    ImuManager::GetInstance().Initialize();
-    ButtonManager::GetInstance().Initialize();
+//    AdcManager::GetInstance().Initialize();
+//    ImuManager::GetInstance().Initialize();
+//    ButtonManager::GetInstance().Initialize();
     ToolsManager::GetInstance().Initialize();
     WifiManager::GetInstance().Initialize();
     ESP_LOGI(TAG, "All managers initialized successfully");
